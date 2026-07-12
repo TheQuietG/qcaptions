@@ -20,6 +20,9 @@ src/qcaptions/
   cli.py          # argparse + orquestación del pipeline (punto de entrada)
                   # subcomando: `qcaptions doctor` (ruteado antes de argparse)
   doctor.py       # diagnóstico del entorno + --download-model (con progreso)
+  intro.py        # logo animado al inicio ([intro] en config / --intro):
+                  # overlay+fade+drift, compositado en el MISMO encode que
+                  # los captions vía -filter_complex (nunca doble re-encode)
   transcribe.py   # extract_audio + whisper.cpp (con progreso -pp) + parse_words
                   # + find_ffmpeg + probe_video (resolución via ffprobe)
   corrections.py  # correcciones (merge proyecto -> ~/.config/qcaptions -> --config)
@@ -136,8 +139,8 @@ Aún NO probado con un video real del usuario (voz humana).
 Checklist de cosas que otro modelo/sesión podría tomar. Ninguna es bloqueante.
 - [ ] **Probar con un video real** del usuario y afinar `config.toml` con los
       términos que su voz haga fallar (es lo más valioso; requiere un .mp4 real).
-- [ ] **Watermark/logo Data Quimbaya** opcional en el `.ass` (un `Dialogue` fijo
-      con `\pos` en una esquina, o `overlay` de un PNG en `burn.py`).
+- [x] ~~Logo/intro Data Quimbaya~~ — hecho (intro.py: logo animado al inicio,
+      config [intro] o --intro; falta que el usuario apunte a su logo real).
 - [ ] **Preset de estilo alternativo**: resaltado con CAJA (BorderStyle 3 +
       BackColour) en vez de color, o color configurable por flag/config.
 - [ ] **Balanceo de líneas**: con 4 palabras largas a veces parte feo; evaluar

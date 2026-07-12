@@ -30,8 +30,10 @@ def burn(
     out: Path,
     mode: str = "fast",
     preview_seconds: float | None = None,
+    intro=None,
 ) -> Path:
-    """Quema los subtítulos .ass sobre el video. Audio copiado sin recodificar."""
+    """Quema los subtítulos .ass (y el logo del intro, si hay) en un solo
+    pase de encode. Audio copiado sin recodificar."""
     ffmpeg = find_ffmpeg(need_ass=True)
 
     tmp_ass: Path | None = None
@@ -43,7 +45,8 @@ def burn(
         tmp_ass = Path(name)
         shutil.copyfile(ass, tmp_ass)
     try:
-        return _burn(ffmpeg, video, tmp_ass or ass, out, mode, preview_seconds)
+        return _burn(ffmpeg, video, tmp_ass or ass, out, mode, preview_seconds,
+                     intro)
     finally:
         if tmp_ass:
             tmp_ass.unlink(missing_ok=True)
@@ -56,13 +59,25 @@ def _burn(
     out: Path,
     mode: str,
     preview_seconds: float | None,
+    intro,
 ) -> Path:
     ass_arg = _escape_filter_path(ass)
 
     base = [ffmpeg, "-y", "-i", str(video)]
+    if intro is not None:
+        from .intro import build_filter
+        from .transcribe import probe_video
+
+        w, h = probe_video(video)
+        # -loop 1: la imagen persiste; -t la corta un poco después del fade-out.
+        base += ["-loop", "1", "-t", f"{intro.end + 1:.3f}", "-i",
+                 str(intro.logo)]
+        base += ["-filter_complex", build_filter(intro, w, h, ass_arg),
+                 "-map", "[vout]", "-map", "0:a?"]
     if preview_seconds is not None:
         base += ["-t", f"{preview_seconds:.3f}"]
-    base += ["-vf", f"ass={ass_arg}"]
+    if intro is None:
+        base += ["-vf", f"ass={ass_arg}"]
     tail = ["-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart",
             str(out)]
 

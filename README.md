@@ -123,6 +123,24 @@ TikTok (que recomprime todo al subir). Para máxima calidad de archivo
 El video no tiene que ser 1080×1920: la resolución se detecta con ffprobe y
 el estilo se escala proporcionalmente (probado con 4K vertical).
 
+## Logo animado al inicio (`[intro]`)
+
+Poné tu logo (PNG con transparencia) al arranque de cada video: aparece con
+fade + deslizamiento suave, sostiene ~2 s y desaparece. Se composita en el
+mismo pase de encode que los captions (sin doble re-encode).
+
+```toml
+# ~/.config/qcaptions/config.toml
+[intro]
+logo = "~/branding/logo.png"
+duration = 2.2      # segundos visible (opcional)
+width_frac = 0.45   # ancho relativo al video (opcional)
+y_frac = 0.20       # posición vertical (opcional)
+```
+
+Con eso configurado, se aplica a todos tus videos automáticamente.
+Por corrida: `--intro logo.png` (pisa la config) o `--no-intro` (lo salta).
+
 ## Correcciones de texto (`config.toml`)
 
 whisper a veces oye mal términos técnicos. Hay varios niveles que se mergean

@@ -81,6 +81,32 @@ def test_scale_style_header_uses_real_resolution():
     assert "PlayResX: 2160" in ass and "PlayResY: 3840" in ass
 
 
+def test_intro_filter_graph():
+    from qcaptions.intro import IntroSpec, build_filter
+
+    spec = IntroSpec(logo=Path("/tmp/logo.png"), start=0.3, duration=2.2,
+                     width_frac=0.45, y_frac=0.20)
+    graph = build_filter(spec, 1080, 1920, "subs.ass")
+    assert "scale=486:-1" in graph            # 1080 * 0.45
+    assert "fade=t=in:st=0.3" in graph
+    assert "between(t,0.3,2.5)" in graph      # start -> start+duration
+    assert graph.endswith("ass=subs.ass[vout]")
+
+
+def test_intro_from_config():
+    import tempfile
+
+    from qcaptions.intro import from_config
+
+    assert from_config({}) is None            # sin logo -> sin intro
+    with tempfile.NamedTemporaryFile(suffix=".png") as f:
+        spec = from_config({"logo": f.name, "duration": 3.0})
+        assert spec is not None and spec.duration == 3.0
+        # el flag --intro pisa a la config
+        spec2 = from_config({"logo": "/no/existe.png"}, override_logo=Path(f.name))
+        assert spec2 is not None and str(spec2.logo) == f.name
+
+
 def test_load_settings_merge_last_wins():
     import tempfile
 

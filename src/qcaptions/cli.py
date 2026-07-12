@@ -14,8 +14,14 @@ from pathlib import Path
 from . import __version__
 from .assgen import AssStyle, build_ass, scale_style
 from .burn import burn
-from .corrections import apply_corrections, load_corrections, load_settings
+from .corrections import (
+    apply_corrections,
+    load_corrections,
+    load_settings,
+    load_table,
+)
 from .grouping import group_words
+from .intro import from_config as intro_from_config
 from .paths import models_dir, user_config_paths
 from .transcribe import (
     PipelineError,
@@ -107,6 +113,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--language", default="es", help="Idioma de la transcripción (default: es)."
+    )
+    p.add_argument(
+        "--intro",
+        type=Path,
+        default=None,
+        metavar="LOGO",
+        help="Logo animado al inicio (PNG, idealmente con transparencia). "
+        "También configurable en [intro] de config.toml para aplicarlo "
+        "siempre.",
+    )
+    p.add_argument(
+        "--no-intro",
+        action="store_true",
+        help="No aplicar el intro aunque esté configurado en config.toml.",
     )
     p.add_argument(
         "--from-ass",
@@ -207,13 +227,22 @@ def _run(args: argparse.Namespace) -> int:
         print(f"→ Video {width}x{height}: estilo escalado "
               f"(fontsize {style.fontsize}, marginV {style.margin_v}).")
 
+    # Intro (logo animado): flag --intro > tabla [intro] de la config.
+    intro = None
+    if not args.no_intro:
+        intro_cfg = load_table(user_config_paths(args.config), "intro")
+        intro = intro_from_config(intro_cfg, override_logo=args.intro)
+    if intro:
+        print(f"→ Intro: {intro.logo.name} "
+              f"({intro.start:g}s → {intro.end:g}s).")
+
     # --- Ruta rápida: re-quemar un .ass editado a mano ---
     if args.from_ass:
         if not args.from_ass.exists():
             raise PipelineError(f"No existe el .ass indicado: {args.from_ass}")
         print(f"→ Quemando {args.from_ass.name} sobre {video.name} ...")
         burn(video, args.from_ass, out_video, mode=burn_mode,
-             preview_seconds=args.preview)
+             preview_seconds=args.preview, intro=intro)
         return _finish(out_video, args)
 
     words_json = Path(f"{stem}.words.json")
@@ -275,7 +304,8 @@ def _run(args: argparse.Namespace) -> int:
     else:
         label = "libx264 archival" if burn_mode == "archival" else "videotoolbox"
         print(f"→ [5/5] Quemando subtítulos ({label}) ...")
-    burn(video, ass_path, out_video, mode=burn_mode, preview_seconds=args.preview)
+    burn(video, ass_path, out_video, mode=burn_mode,
+         preview_seconds=args.preview, intro=intro)
 
     print(f"  Intermedios: {words_json.name}, {ass_path.name}")
     print(f"  Editá el .ass y re-quemá con: "

@@ -87,20 +87,23 @@ def apply_corrections(
     return result
 
 
-def load_settings(config_paths: list[Path]) -> dict:
-    """Mergea las tablas [settings] de la cadena de configs (última gana).
-
-    Uso típico en ~/.config/qcaptions/config.toml:
-        [settings]
-        model = "ggml-large-v3-turbo-q5_0"
-    """
+def load_table(config_paths: list[Path], table: str) -> dict:
+    """Mergea una tabla TOML de la cadena de configs (última gana)."""
     merged: dict = {}
     for path in config_paths:
         if path is None or not path.exists():
             continue
         data = tomllib.loads(path.read_text(encoding="utf-8"))
-        merged.update(data.get("settings", {}))
+        merged.update(data.get(table, {}))
     return merged
+
+
+def load_settings(config_paths: list[Path]) -> dict:
+    """Tabla [settings] mergeada. Uso típico en ~/.config/qcaptions/config.toml:
+        [settings]
+        model = "ggml-large-v3-turbo-q5_0"
+    """
+    return load_table(config_paths, "settings")
 
 
 def _norm(text: str) -> str:
