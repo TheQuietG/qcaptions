@@ -63,8 +63,22 @@ def _burn(
 ) -> Path:
     ass_arg = _escape_filter_path(ass)
 
+    audio_args = ["-c:a", "copy"]
     base = [ffmpeg, "-y", "-i", str(video)]
-    if intro is not None:
+    if intro is not None and intro.mode == "card":
+        from .intro import build_card_filter
+        from .transcribe import probe_fps, probe_video
+
+        w, h = probe_video(video)
+        fps = probe_fps(video)
+        base += ["-loop", "1", "-t", f"{intro.duration + 1:.3f}", "-i",
+                 str(intro.logo)]
+        base += ["-filter_complex",
+                 build_card_filter(intro, w, h, fps, ass_arg),
+                 "-map", "[vout]", "-map", "[aout]"]
+        # adelay obliga a re-encodear el audio (no se puede copiar).
+        audio_args = ["-c:a", "aac", "-b:a", "192k"]
+    elif intro is not None:
         from .intro import build_filter
         from .transcribe import probe_video
 
@@ -78,7 +92,7 @@ def _burn(
         base += ["-t", f"{preview_seconds:.3f}"]
     if intro is None:
         base += ["-vf", f"ass={ass_arg}"]
-    tail = ["-pix_fmt", "yuv420p", "-c:a", "copy", "-movflags", "+faststart",
+    tail = ["-pix_fmt", "yuv420p", *audio_args, "-movflags", "+faststart",
             str(out)]
 
     if mode == "archival":

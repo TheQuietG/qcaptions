@@ -233,7 +233,11 @@ def _run(args: argparse.Namespace) -> int:
     if not args.no_intro:
         intro_cfg = load_table(user_config_paths(args.config), "intro")
         intro = intro_from_config(intro_cfg, override_logo=args.intro)
-    if intro:
+    if intro and intro.mode == "card":
+        print(f"→ Intro card: {intro.display_name} "
+              f"({intro.duration:g}s de card; video y captions corridos "
+              f"{intro.shift:g}s).")
+    elif intro:
         print(f"→ Intro: {intro.display_name} "
               f"({intro.start:g}s → {intro.end:g}s).")
 
@@ -290,6 +294,15 @@ def _run(args: argparse.Namespace) -> int:
     captions = group_words(
         words, max_words=args.max_words, max_duration=args.max_duration
     )
+    # Modo card: el video empieza después de la card -> correr los captions.
+    # (words.json queda SIN correr: siempre relativo al audio original.)
+    if intro and intro.shift:
+        for c in captions:
+            c["start"] += intro.shift
+            c["end"] += intro.shift
+            for w in c["words"]:
+                w["start"] += intro.shift
+                w["end"] += intro.shift
     ass = build_ass(captions, style)
     ass_path.write_text(ass, encoding="utf-8")
     print(f"    {len(captions)} captions → {ass_path.name}")

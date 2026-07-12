@@ -199,6 +199,28 @@ def probe_video(video: Path) -> tuple[int, int]:
         return 1080, 1920
 
 
+def probe_fps(video: Path) -> float:
+    """FPS del primer stream de video (default 30 si no se puede leer)."""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        sibling = Path(find_ffmpeg()).parent / "ffprobe"
+        ffprobe = str(sibling) if sibling.exists() else None
+    if not ffprobe:
+        return 30.0
+    try:
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=r_frame_rate", "-of", "csv=p=0",
+             str(video)],
+            check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True,
+        ).stdout.strip()
+        num, den = out.split("/")
+        return float(num) / float(den)
+    except (ValueError, ZeroDivisionError, OSError):
+        return 30.0
+
+
 def _run_with_progress(cmd: list[str], what: str) -> None:
     """Corre un comando mostrando en vivo sus líneas de progreso.
 

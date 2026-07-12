@@ -21,8 +21,16 @@ src/qcaptions/
                   # subcomando: `qcaptions doctor` (ruteado antes de argparse)
   doctor.py       # diagnóstico del entorno + --download-model (con progreso)
   intro.py        # logo animado al inicio ([intro] en config / --intro):
-                  # overlay+fade+drift, compositado en el MISMO encode que
-                  # los captions vía -filter_complex (nunca doble re-encode)
+                  # mode=overlay (logo sobre el video, fade+drift) o
+                  # mode=card (pantalla negra + logo esparciéndose estilo
+                  # circuito + xfade al video). Compositado en el MISMO
+                  # encode que los captions vía -filter_complex.
+                  # GOTCHAS card: xfade exige mismos fps/size/SAR en ambas
+                  # ramas (por eso fps={fps_i} y setsar=1 en las dos);
+                  # geq anima con N/fps sobre gbrap (planar RGBA);
+                  # adelay obliga a re-encodear el audio (aac 192k);
+                  # los captions se corren spec.shift en cli.py PERO
+                  # words.json queda sin correr (relativo al audio original).
   transcribe.py   # extract_audio + whisper.cpp (con progreso -pp) + parse_words
                   # + find_ffmpeg + probe_video (resolución via ffprobe)
   corrections.py  # correcciones (merge proyecto -> ~/.config/qcaptions -> --config)

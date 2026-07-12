@@ -1,8 +1,16 @@
 """Logo animado al inicio del video (branding).
 
-Se composita en el MISMO pase de encode que los captions (un solo re-encode).
-Animación: fade-in con deslizamiento suave hacia arriba, hold, fade-out.
-Todo con filtros nativos de ffmpeg (overlay + fade alpha + expresión en y).
+Dos modos, ambos compositados en el MISMO pase de encode que los captions:
+
+- overlay (default): el logo aparece sobre el video con fade + deslizamiento.
+- card: el video arranca con una pantalla NEGRA donde el logo se "esparce"
+  desde el centro (revelado expansivo estilo circuito, borde difuso) y luego
+  hace crossfade al video real. Los captions y el audio se corren
+  automáticamente para mantener el sync.
+
+La animación vive en build_filter (overlay) y build_card_filter (card) —
+son grafos de filtros de ffmpeg puros, pensados para ser editables
+(ver README: "Personalizar la animación").
 """
 
 from __future__ import annotations
@@ -12,21 +20,36 @@ from pathlib import Path
 
 from .transcribe import PipelineError
 
+# Crossfade card -> video (s). El video (y sus captions/audio) empieza en
+# duration - XFADE.
+XFADE = 0.5
+
 
 @dataclass
 class IntroSpec:
     logo: Path                # imagen que consume ffmpeg (PNG)
     source: Path | None = None  # archivo original del usuario (p.ej. el .svg)
-    start: float = 0.3       # cuándo aparece (s)
-    duration: float = 2.2    # cuánto dura visible en total (s)
+    mode: str = "overlay"    # "overlay" | "card"
+    start: float = 0.3       # overlay: cuándo aparece (s)
+    duration: float = 2.2    # overlay: tiempo visible / card: duración total
     fade_in: float = 0.4
     fade_out: float = 0.5
     width_frac: float = 0.45  # ancho del logo como fracción del ancho del video
-    y_frac: float = 0.20      # posición vertical del centro (fracción de altura)
+    y_frac: float = 0.20      # overlay: posición vertical (fracción de altura)
 
     @property
     def end(self) -> float:
         return self.start + self.duration
+
+    @property
+    def shift(self) -> float:
+        """Cuánto se corre el contenido del video (captions + audio).
+
+        Solo el modo card desplaza; el overlay va sobre el video sin moverlo.
+        """
+        if self.mode == "card":
+            return max(0.0, self.duration - XFADE)
+        return 0.0
 
     @property
     def display_name(self) -> str:
@@ -48,6 +71,18 @@ def from_config(cfg: dict, override_logo: Path | None = None) -> IntroSpec | Non
     if logo.suffix.lower() == ".svg":
         logo = _rasterize_svg(logo)
     spec = IntroSpec(logo=logo, source=source)
+
+    mode = str(cfg.get("mode", "overlay")).strip().lower()
+    if mode not in ("overlay", "card"):
+        raise PipelineError(
+            f"[intro] mode inválido: '{mode}' (opciones: overlay, card)."
+        )
+    spec.mode = mode
+    # Defaults distintos por modo (si el usuario no los fija).
+    if mode == "card":
+        spec.duration = 2.8
+        spec.width_frac = 0.55
+
     for key in ("start", "duration", "fade_in", "fade_out", "width_frac", "y_frac"):
         if key in cfg:
             setattr(spec, key, float(cfg[key]))
@@ -96,6 +131,43 @@ def _rasterize_svg(svg: Path) -> Path:
     raise PipelineError(
         f"No pude rasterizar el SVG: {svg}\n"
         "Instalá rsvg-convert (brew install librsvg) o convertí el logo a PNG."
+    )
+
+
+def build_card_filter(
+    spec: IntroSpec, video_w: int, video_h: int, fps: float, ass_arg: str
+) -> str:
+    """Grafo del modo card: negro -> logo esparciéndose -> crossfade al video.
+
+    El "esparcirse como circuito" es un revelado expansivo con distancia
+    Manhattan (rombo, ángulos rectos — lectura tech) y borde difuso, animado
+    por frame (N/fps) multiplicando el alpha original del logo.
+
+    Entradas: [0:v]+[0:a] video, [1:v] logo (con -loop 1). Salidas: [vout], [aout].
+    El audio se retrasa spec.shift para quedar en sync tras la card.
+    """
+    fps_i = max(1, round(fps))
+    logo_w = max(2, round(video_w * spec.width_frac))
+    t0 = 0.25          # cuándo empieza el revelado (s)
+    reveal = 1.3       # cuánto tarda en esparcirse por completo (s)
+    feather = 60       # borde difuso del frente de expansión (px)
+    speed = logo_w / reveal  # px de radio Manhattan por segundo
+    # alpha final = alpha del logo * frente de expansión (0..1 con feather)
+    a_expr = (
+        f"alpha(X,Y)*clip(((N/{fps_i}-{t0})*{speed}"
+        f"-(abs(X-W/2)+abs(Y-H/2)))/{feather},0,1)"
+    )
+    delay_ms = int(round(spec.shift * 1000))
+    return (
+        f"color=black:s={video_w}x{video_h}:r={fps_i}:d={spec.duration:.3f},"
+        f"format=yuv420p,setsar=1[bg];"
+        f"[1:v]fps={fps_i},format=gbrap,scale={logo_w}:-1,"
+        f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{a_expr}'[lg];"
+        f"[bg][lg]overlay=x=(W-w)/2:y=(H-h)/2[card];"
+        f"[0:v]fps={fps_i},format=yuv420p,setsar=1[v0];"
+        f"[card][v0]xfade=transition=fade:duration={XFADE}:offset={spec.shift:.3f}[vx];"
+        f"[vx]ass={ass_arg}[vout];"
+        f"[0:a]adelay={delay_ms}:all=1[aout]"
     )
 
 

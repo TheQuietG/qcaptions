@@ -125,29 +125,57 @@ el estilo se escala proporcionalmente (probado con 4K vertical).
 
 ## Logo animado al inicio (`[intro]`)
 
-Poné tu logo (PNG con transparencia) al arranque de cada video: aparece con
-fade + deslizamiento suave, sostiene ~2 s y desaparece. Se composita en el
-mismo pase de encode que los captions (sin doble re-encode).
+Dos modos, ambos compositados en el mismo pase de encode que los captions
+(sin doble re-encode):
+
+- **`overlay`** (default): el logo aparece SOBRE el video con fade +
+  deslizamiento suave, sostiene ~2 s y desaparece. No altera la duración.
+- **`card`**: el video arranca con una **pantalla negra** donde el logo se
+  *esparce desde el centro* (revelado expansivo estilo circuito) y luego hace
+  crossfade al video. Los **captions y el audio se corren automáticamente**
+  para mantener el sync (el video final dura `duration - 0.5s` más).
 
 ```toml
 # ~/.config/qcaptions/config.toml
 [intro]
-logo = "~/branding/logo.png"
-duration = 2.2      # segundos visible (opcional)
-width_frac = 0.45   # ancho relativo al video (opcional)
-y_frac = 0.20       # posición vertical (opcional)
+logo = "~/branding/logo.png"   # o .svg (se rasteriza solo)
+mode = "card"                  # "overlay" (default) | "card"
+duration = 2.8      # card: duración total / overlay: tiempo visible
+width_frac = 0.55   # ancho del logo relativo al video
+# solo overlay:
+# y_frac = 0.20     # posición vertical
+# start = 0.3       # cuándo aparece
 ```
 
 Con eso configurado, se aplica a todos tus videos automáticamente.
 Por corrida: `--logo logo.png` (alias: `--intro`; pisa la config) o
-`--no-intro` (lo salta).
+`--no-intro` (lo salta). Acepta **SVG** directamente (usa `rsvg-convert` si
+está, o Quick Look de macOS como fallback).
 
-También acepta **SVG** directamente — se rasteriza solo (con `rsvg-convert`
-si está instalado, o Quick Look de macOS como fallback):
+### Personalizar la animación
 
-```bash
-qcaptions video.mp4 --logo logo.svg
-```
+Las opciones de arriba cubren tamaño/tiempos. Si querés **otra animación**
+(otro tipo de revelado, glow, rebote, otro color de fondo de la card...),
+la animación es un grafo de filtros de ffmpeg puro y vive en dos funciones
+de [`src/qcaptions/intro.py`](src/qcaptions/intro.py):
+
+- `build_filter()` — modo overlay
+- `build_card_filter()` — modo card
+
+**Camino recomendado: pedíselo a un agente de AI** (Claude Code, etc.)
+apuntándolo a ese archivo. Prompt de ejemplo:
+
+> En `src/qcaptions/intro.py`, modificá `build_card_filter()` para que el
+> logo aparezca con [describe tu animación]. El contrato: recibe el spec,
+> el tamaño del video, los fps y la ruta del .ass; devuelve un
+> `-filter_complex` con entradas `[0:v]`/`[0:a]` (video) y `[1:v]` (logo,
+> con `-loop 1`), y salidas `[vout]` y `[aout]`. El video real debe entrar
+> en `spec.shift` segundos y el audio retrasarse eso mismo. Validá con
+> `python3 scripts/validate.py` y extrayendo frames con ffmpeg.
+
+**Camino manual**: editá esas funciones directamente — son f-strings de
+filtergraphs documentadas. Referencia de filtros: `ffmpeg -filters` y
+https://ffmpeg.org/ffmpeg-filters.html
 
 ## Correcciones de texto (`config.toml`)
 

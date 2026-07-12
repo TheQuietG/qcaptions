@@ -107,6 +107,34 @@ def test_intro_from_config():
         assert spec2 is not None and str(spec2.logo) == f.name
 
 
+def test_intro_card_filter_and_shift():
+    from qcaptions.intro import IntroSpec, build_card_filter
+
+    spec = IntroSpec(logo=Path("/tmp/logo.png"), mode="card", duration=2.8)
+    assert spec.shift == 2.3  # duration - XFADE(0.5)
+    graph = build_card_filter(spec, 1080, 1920, 30.0, "subs.ass")
+    assert "color=black:s=1080x1920" in graph
+    assert "xfade=transition=fade:duration=0.5:offset=2.300" in graph
+    assert "adelay=2300:all=1" in graph
+    assert "abs(X-W/2)+abs(Y-H/2)" in graph   # revelado Manhattan (circuito)
+    # overlay no desplaza nada
+    assert IntroSpec(logo=Path("/tmp/l.png")).shift == 0.0
+
+
+def test_intro_card_config_defaults():
+    import tempfile
+
+    from qcaptions.intro import from_config
+
+    with tempfile.NamedTemporaryFile(suffix=".png") as f:
+        spec = from_config({"logo": f.name, "mode": "card"})
+        assert spec.mode == "card"
+        assert spec.duration == 2.8 and spec.width_frac == 0.55
+        # el usuario puede pisar los defaults del modo
+        spec2 = from_config({"logo": f.name, "mode": "card", "duration": 4.0})
+        assert spec2.duration == 4.0
+
+
 def test_load_settings_merge_last_wins():
     import tempfile
 
