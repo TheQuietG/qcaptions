@@ -156,6 +156,27 @@ Checklist de cosas que otro modelo/sesión podría tomar. Ninguna es bloqueante.
 - [x] ~~`--open`~~ — hecho.
 - [x] ~~modelo cuantizado~~ — hecho (doctor lo descarga; `--model *-q5_0`).
 
+## Distribución (open source + Homebrew)
+- Repo público: https://github.com/TheQuietG/qcaptions (MIT). Releases con tags
+  `vX.Y.Z`.
+- Tap: https://github.com/TheQuietG/homebrew-tap (`Formula/qcaptions.rb`).
+  Instalación de usuarios: `brew tap TheQuietG/tap && brew install qcaptions`.
+- **Para publicar una versión nueva**: bump de versión en `__init__.py` y
+  `pyproject.toml` → commit → `git tag vX.Y.Z && git push origin vX.Y.Z` →
+  `gh release create vX.Y.Z` → `curl -sL <tarball del tag> | shasum -a 256` →
+  actualizar `url` y `sha256` en la fórmula del tap → push del tap →
+  `brew upgrade qcaptions` para probar.
+- **Rutas en modo instalado** (`paths.py`): modelos en `~/.qcaptions/models/`,
+  config de usuario en `~/.config/qcaptions/config.toml`; el modo dev (checkout
+  con `.git` o `models/`) usa el repo. Override: env `QCAPTIONS_HOME`. Las
+  correcciones default van EMPAQUETADAS (`src/qcaptions/default_corrections.toml`);
+  el `config.toml` de la raíz es override local y está git-ignorado.
+- **Rutas .ass hostiles** (coma/comilla/corchete): `burn()` las copia a un temp
+  seguro en vez de escapar el filtergraph (el doble des-escape de ffmpeg es
+  frágil). No "arreglar" volviendo a escaparlas a mano.
+- Auditoría pre-publicación hecha: sin secretos ni PII en archivos ni historia;
+  commits con email de marca (@dataquimbaya.com).
+
 ## Cómo correr los tests
 ```bash
 python3 -m pytest tests/     # o correr las funciones test_* a mano (sin pytest)
