@@ -1,0 +1,20 @@
+# Modelos whisper (pesados, se descargan aparte)
+models/
+*.bin
+
+# Material de prueba y salidas
+samples/
+*_captioned.mp4
+*.words.json
+*.subs.ass
+*.whisper.json
+*.16k.wav
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/

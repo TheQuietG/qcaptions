@@ -1,0 +1,20 @@
+# qcaptions — correcciones post-transcripción
+#
+# Clave = lo que whisper suele oír (una o varias palabras, sin importar
+# mayúsculas/acentos). Valor = texto correcto que quedará en el subtítulo.
+#
+# Los reemplazos multi-palabra colapsan las palabras en una sola (útil para
+# siglas/cifras: "ene ocho ene" -> "n8n", así nunca se parte la sigla).
+
+[corrections]
+"ene ocho ene" = "n8n"
+"ene ocho" = "n8n"
+"quimballa" = "Quimbaya"
+"quimbaia" = "Quimbaya"
+"cloud" = "Claude"
+"clod" = "Claude"
+"emcp" = "MCP"
+"eme ce pe" = "MCP"
+"workflow" = "workflow"
+"tik tok" = "TikTok"
+"tiktok" = "TikTok"
