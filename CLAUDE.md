@@ -18,11 +18,14 @@ español con términos técnicos en inglés (n8n, Claude, MCP, workflow…).
 ```
 src/qcaptions/
   cli.py          # argparse + orquestación del pipeline (punto de entrada)
-  transcribe.py   # extract_audio + whisper.cpp + parse_words + find_ffmpeg
-  corrections.py  # diccionario config.toml (reemplazos, colapso multi-palabra)
+                  # subcomando: `qcaptions doctor` (ruteado antes de argparse)
+  doctor.py       # diagnóstico del entorno + --download-model (con progreso)
+  transcribe.py   # extract_audio + whisper.cpp (con progreso -pp) + parse_words
+                  # + find_ffmpeg + probe_video (resolución via ffprobe)
+  corrections.py  # correcciones (merge proyecto -> ~/.config/qcaptions -> --config)
   grouping.py     # agrupa palabras en captions (max_words / max_duration / pausas)
-  assgen.py       # genera el .ass (estilo + karaoke con \t por palabra)
-  burn.py         # burn-in con ffmpeg (crf 18, preset slow, audio copy)
+  assgen.py       # genera el .ass (estilo + karaoke + scale_style por resolución)
+  burn.py         # burn-in: videotoolbox (default, rápido) / --archival libx264
 config.toml       # correcciones por defecto (n8n, Claude, MCP, Quimbaya...)
 scripts/validate.py  # validación end-to-end reproducible (correr tras cambios)
 models/           # ggml-*.bin (NO en git; ~1.5 GB)
@@ -61,7 +64,21 @@ tests/            # tests de las piezas puras (corrections, grouping, assgen)
 - **Colores ASS** = `&HAABBGGRR`. Blanco `&H00FFFFFF`, negro `&H00000000`.
 - **Posición**: Alignment 2 (abajo-centro) + `MarginV=600` → ~68% de altura,
   arriba de la UI de TikTok.
-- Sin dependencias Python externas: solo stdlib (`tomllib`, `argparse`).
+- **Resolución**: el estilo se diseña sobre 1080×1920 y `scale_style()` lo
+  adapta a la resolución real (via `probe_video`/ffprobe). Los flags
+  `--fontsize/--margin-v` explícitos NO se re-escalan (se respetan tal cual).
+- **Burn default = h264_videotoolbox** (`-q:v 65`): segundos en vez de minutos,
+  calidad de sobra para TikTok (recomprime todo). `--archival` = libx264 crf 18
+  slow. Si videotoolbox falla, cae solo a libx264.
+- **Cache de transcripción**: el `.whisper.json` crudo se CONSERVA junto al
+  video y se reusa si es más nuevo que el .mp4 (`--force` regenera). Las
+  correcciones y la agrupación se re-aplican SIEMPRE desde el crudo, así editar
+  config.toml no requiere re-transcribir. Ojo: cambiar `--model` no invalida
+  el cache (usar `--force`).
+- **Progreso whisper**: `-np -pp` juntos → sin logs pero con líneas
+  `progress = N%` que `_run_with_progress` muestra con `\r`.
+- Sin dependencias Python externas: solo stdlib (`tomllib`, `argparse`,
+  `urllib` para descargar modelos).
 
 ## Cambiar de modelo whisper
 El flag `--model` acepta un nombre (busca `models/ggml-<nombre>.bin`) o una ruta.
@@ -127,9 +144,17 @@ Checklist de cosas que otro modelo/sesión podría tomar. Ninguna es bloqueante.
 - [ ] **Correcciones sensibles a contexto** (ej. "cloud"→"Claude" solo a veces).
       Hoy el reemplazo es incondicional; se podría hacer por regex/contexto.
 - [ ] **Emojis / énfasis** por palabra clave (estilo CapCut más agresivo).
-- [ ] **`--preview`**: quemar solo los primeros N segundos para iterar rápido.
-- [ ] **Empaquetar** los binarios/rutas: hoy `find_ffmpeg` asume rutas de brew;
-      documentado, pero podría leerse de config.
+- [ ] **Invalidar cache al cambiar --model** (guardar el modelo usado en el
+      .whisper.json o en un sidecar y comparar).
+- [x] ~~`--preview`~~ — hecho (quema los primeros N segundos, encoder rápido).
+- [x] ~~doctor + download-model~~ — hecho (`qcaptions doctor`).
+- [x] ~~burn por hardware~~ — hecho (videotoolbox default + `--archival`).
+- [x] ~~cache de transcripción~~ — hecho (reusa `.whisper.json`, `--force`).
+- [x] ~~resoluciones ≠1080×1920~~ — hecho (`scale_style` + `probe_video`).
+- [x] ~~config de usuario~~ — hecho (`~/.config/qcaptions/config.toml`).
+- [x] ~~progreso de whisper~~ — hecho (`-pp` + `_run_with_progress`).
+- [x] ~~`--open`~~ — hecho.
+- [x] ~~modelo cuantizado~~ — hecho (doctor lo descarga; `--model *-q5_0`).
 
 ## Cómo correr los tests
 ```bash

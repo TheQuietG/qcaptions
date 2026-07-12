@@ -5,6 +5,8 @@ models/
 # Material de prueba y salidas
 samples/
 *_captioned.mp4
+*_preview.mp4
+.validate_tmp/
 *.words.json
 *.subs.ass
 *.whisper.json

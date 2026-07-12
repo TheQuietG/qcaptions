@@ -5,8 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from qcaptions.assgen import AssStyle, build_ass  # noqa: E402
-from qcaptions.corrections import apply_corrections  # noqa: E402
+from qcaptions.assgen import AssStyle, build_ass, scale_style  # noqa: E402
+from qcaptions.corrections import apply_corrections, load_corrections  # noqa: E402
 from qcaptions.grouping import group_words  # noqa: E402
 
 
@@ -55,3 +55,43 @@ def test_ass_uppercase_toggle():
     caps = group_words(_words(("hola", 0.0, 0.5)), 4, 1.8)
     assert "HOLA" in build_ass(caps, AssStyle(uppercase=True))
     assert "hola" in build_ass(caps, AssStyle(uppercase=False))
+
+
+def test_scale_style_4k_vertical():
+    s = scale_style(AssStyle(), 2160, 3840)  # 4K vertical = 2x
+    assert (s.play_res_x, s.play_res_y) == (2160, 3840)
+    assert s.fontsize == 180 and s.outline == 12
+    assert s.margin_v == 1200 and s.margin_lr == 120
+
+
+def test_scale_style_identity_1080():
+    s = scale_style(AssStyle(), 1080, 1920)
+    assert s.fontsize == 90 and s.outline == 6 and s.margin_v == 600
+    ass = build_ass(group_words(_words(("a", 0.0, 0.5)), 4, 1.8), s)
+    assert "PlayResX: 1080" in ass and "PlayResY: 1920" in ass
+
+
+def test_scale_style_header_uses_real_resolution():
+    s = scale_style(AssStyle(), 2160, 3840)
+    ass = build_ass(group_words(_words(("a", 0.0, 0.5)), 4, 1.8), s)
+    assert "PlayResX: 2160" in ass and "PlayResY: 3840" in ass
+
+
+def test_load_corrections_merge_user_over_project(tmp_path=None):
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        proj = Path(d) / "proj.toml"
+        user = Path(d) / "user.toml"
+        proj.write_text(
+            '[corrections]\n"cloud" = "Claude"\n"emcp" = "MCP"\n',
+            encoding="utf-8",
+        )
+        user.write_text('[corrections]\n"Cloud" = "cloud"\n', encoding="utf-8")
+        rules = load_corrections([proj, user])
+        as_dict = {" ".join(k): v for k, v in rules}
+        # el user config pisa al del proyecto (match normalizado)
+        assert as_dict["cloud"] == "cloud"
+        assert as_dict["emcp"] == "MCP"
+        # rutas inexistentes se ignoran sin error
+        assert load_corrections([Path(d) / "nope.toml"]) == []

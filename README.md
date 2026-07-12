@@ -22,14 +22,22 @@ brew install ffmpeg-full     # trae libass (necesario para quemar el .ass)
 # 3. Fuente del branding (Montserrat ExtraBold)
 brew install --cask font-montserrat
 
-# 4. Modelo whisper (large-v3-turbo, ~1.5 GB) en models/
-mkdir -p models
-curl -L -o models/ggml-large-v3-turbo.bin \
-  "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin?download=true"
-
-# 5. Instalar el CLI en el PATH
+# 4. Instalar el CLI en el PATH
 brew install pipx && pipx ensurepath
 pipx install --editable .
+
+# 5. Descargar el modelo y verificar que todo esté listo
+qcaptions doctor --download-model     # baja ggml-large-v3-turbo (~1.5 GB)
+```
+
+`qcaptions doctor` diagnostica el entorno completo (whisper, ffmpeg, libass,
+modelo, fuente) y te dice el comando exacto para arreglar lo que falte.
+
+¿Poco espacio? El modelo cuantizado rinde casi igual y pesa un tercio:
+
+```bash
+qcaptions doctor --download-model ggml-large-v3-turbo-q5_0
+qcaptions video.mp4 --model ggml-large-v3-turbo-q5_0
 ```
 
 Requisitos: Python 3.11+ (usa solo stdlib), macOS Apple Silicon.
@@ -57,6 +65,21 @@ re-transcribir:
 qcaptions video.mp4 --from-ass video.subs.ass
 ```
 
+### Iterar rápido
+
+- **Cache**: la transcripción (`.whisper.json`) se conserva y se reusa mientras
+  el video no cambie — re-correr para ajustar estilo o correcciones es
+  instantáneo. `--force` re-transcribe.
+- **`--preview 10`**: quema solo los primeros 10 s a `<video>_preview.mp4`.
+- **`--open`**: abre el resultado en QuickTime al terminar.
+
+### Calidad del burn
+
+Por defecto se usa el encoder por hardware de Apple Silicon
+(`h264_videotoolbox`): quema un video en segundos y la calidad sobra para
+TikTok (que recomprime todo al subir). Para máxima calidad de archivo
+(libx264 crf 18 preset slow, mucho más lento): `--archival`.
+
 ### Flags
 
 | flag | efecto |
@@ -67,15 +90,29 @@ qcaptions video.mp4 --from-ass video.subs.ass
 | `--no-uppercase`      | no pasar el texto a MAYÚSCULAS |
 | `--no-pop`            | desactivar el "pop" de entrada |
 | `--font "..."`        | fuente (default `Montserrat ExtraBold`) |
-| `--fontsize N`        | tamaño (default 90) |
-| `--margin-v N`        | margen inferior en px (default 600, ~68% de altura) |
+| `--fontsize N`        | tamaño (default 90 en 1080p, se escala a la resolución real) |
+| `--margin-v N`        | margen inferior (default 600 en 1080×1920, se escala) |
 | `--dry-run`           | genera `.words.json` y `.ass` **sin** quemar el video |
+| `--preview SEG`       | quema solo los primeros SEG segundos (iteración rápida) |
+| `--archival`          | burn libx264 crf 18 slow (máxima calidad, lento) |
+| `--force`             | ignora la transcripción cacheada y re-transcribe |
+| `--open`              | abre el video final al terminar |
 | `--from-ass FILE.ass` | salta transcripción y quema un `.ass` existente |
 | `--out FILE.mp4`      | ruta del video final |
 
+El video no tiene que ser 1080×1920: la resolución se detecta con ffprobe y
+el estilo se escala proporcionalmente (probado con 4K vertical).
+
 ## Correcciones de texto (`config.toml`)
 
-whisper a veces oye mal términos técnicos. Editá `config.toml`:
+whisper a veces oye mal términos técnicos. Hay tres niveles que se mergean
+(el de más abajo pisa al de más arriba):
+
+1. `config.toml` del proyecto (los defaults del repo)
+2. `~/.config/qcaptions/config.toml` (tus correcciones personales)
+3. `--config otro.toml` (por corrida)
+
+Formato:
 
 ```toml
 [corrections]

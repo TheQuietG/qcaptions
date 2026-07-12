@@ -28,8 +28,34 @@ class AssStyle:
     outline: int = 6
     shadow: int = 0
     margin_v: int = 600
+    margin_lr: int = 60
     uppercase: bool = True
     pop: bool = True
+    play_res_x: int = PLAY_RES_X
+    play_res_y: int = PLAY_RES_Y
+
+
+def scale_style(style: AssStyle, width: int, height: int) -> AssStyle:
+    """Adapta el estilo (diseñado sobre 1080x1920) a la resolución real.
+
+    Escala fontsize/outline/márgenes proporcionalmente para que el texto se
+    vea igual en 4K vertical, horizontal, etc. Los valores ya ajustados por
+    el usuario (via flags) deben pasarse DESPUÉS de escalar.
+    """
+    fx = width / PLAY_RES_X
+    fy = height / PLAY_RES_Y
+    return AssStyle(
+        fontname=style.fontname,
+        fontsize=max(1, round(style.fontsize * fx)),
+        outline=max(1, round(style.outline * fx)),
+        shadow=style.shadow,
+        margin_v=round(style.margin_v * fy),
+        margin_lr=round(style.margin_lr * fx),
+        uppercase=style.uppercase,
+        pop=style.pop,
+        play_res_x=width,
+        play_res_y=height,
+    )
 
 
 def build_ass(captions: list[dict], style: AssStyle) -> str:
@@ -45,15 +71,15 @@ def _header(style: AssStyle) -> str:
     return f"""[Script Info]
 ; qcaptions — Data Quimbaya
 ScriptType: v4.00+
-PlayResX: {PLAY_RES_X}
-PlayResY: {PLAY_RES_Y}
+PlayResX: {style.play_res_x}
+PlayResY: {style.play_res_y}
 WrapStyle: 0
 ScaledBorderAndShadow: yes
 YCbCr Matrix: TV.709
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: DQ,{style.fontname},{style.fontsize},{WHITE},{WHITE},{BLACK},&H00000000,1,0,0,0,100,100,0,0,1,{style.outline},{style.shadow},2,60,60,{style.margin_v},1
+Style: DQ,{style.fontname},{style.fontsize},{WHITE},{WHITE},{BLACK},&H00000000,1,0,0,0,100,100,0,0,1,{style.outline},{style.shadow},2,{style.margin_lr},{style.margin_lr},{style.margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

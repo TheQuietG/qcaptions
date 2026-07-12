@@ -120,9 +120,10 @@ def transcribe(
         "-sow",              # split on word -> cada segmento es una palabra
         "-oj",               # output json
         "-of", str(out_prefix),
-        "-np",               # no prints (silencioso salvo lo necesario)
+        "-np",               # sin logs de whisper (el progreso lo da -pp)
+        "-pp",               # print progress -> lo mostramos en vivo
     ]
-    _run(cmd, "transcribiendo con whisper.cpp (puede tardar)")
+    _run_with_progress(cmd, "transcribiendo con whisper.cpp")
 
     produced = Path(f"{out_prefix}.json")
     if not produced.exists():
@@ -170,6 +171,72 @@ def _find_whisper() -> str:
         "No se encontró whisper.cpp (whisper-cli / whisper-cpp). "
         "Instálalo con: brew install whisper-cpp"
     )
+
+
+def probe_video(video: Path) -> tuple[int, int]:
+    """Devuelve (ancho, alto) del primer stream de video usando ffprobe.
+
+    Si ffprobe no está o falla, asume 1080x1920 (el formato típico del usuario).
+    """
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        # ffprobe suele vivir junto al ffmpeg encontrado
+        sibling = Path(find_ffmpeg()).parent / "ffprobe"
+        if sibling.exists():
+            ffprobe = str(sibling)
+    if not ffprobe:
+        return 1080, 1920
+    try:
+        out = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=width,height", "-of", "csv=p=0", str(video)],
+            check=False, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            text=True,
+        ).stdout.strip()
+        w, h = out.split(",")[:2]
+        return int(w), int(h)
+    except (ValueError, OSError):
+        return 1080, 1920
+
+
+def _run_with_progress(cmd: list[str], what: str) -> None:
+    """Corre un comando mostrando en vivo sus líneas de progreso.
+
+    whisper-cli con -pp emite líneas 'progress = N%' por stderr; las mostramos
+    con \\r para que un video largo no parezca colgado. El resto se acumula
+    para diagnosticar si el comando falla.
+    """
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+        )
+    except FileNotFoundError as exc:
+        raise PipelineError(f"No se pudo ejecutar {cmd[0]}: {exc}") from exc
+
+    buffer: list[str] = []
+    last_pct = ""
+    assert proc.stdout is not None
+    for line in proc.stdout:
+        buffer.append(line)
+        if "progress" in line and "%" in line:
+            last_pct = line.rsplit("=", 1)[-1].strip()
+            sys.stdout.write(f"\r    progreso: {last_pct}   ")
+            sys.stdout.flush()
+    proc.wait()
+    if last_pct:
+        if last_pct.rstrip("%").strip() != "100":
+            sys.stdout.write("\r    progreso: 100%   ")
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+    if proc.returncode != 0:
+        sys.stderr.write("".join(buffer))
+        raise PipelineError(
+            f"Falló al {what} (código {proc.returncode}). "
+            f"Comando: {' '.join(cmd)}"
+        )
 
 
 def _run(cmd: list[str], what: str) -> None:

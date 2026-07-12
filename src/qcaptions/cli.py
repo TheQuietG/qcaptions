@@ -1,14 +1,18 @@
-"""CLI de qcaptions — un solo comando corre todo el pipeline."""
+"""CLI de qcaptions — un solo comando corre todo el pipeline.
+
+Además: `qcaptions doctor [--download-model NOMBRE]` diagnostica el entorno.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from pathlib import Path
 
 from . import __version__
-from .assgen import AssStyle, build_ass
+from .assgen import AssStyle, build_ass, scale_style
 from .burn import burn
 from .corrections import apply_corrections, load_corrections
 from .grouping import group_words
@@ -16,10 +20,13 @@ from .transcribe import (
     PipelineError,
     extract_audio,
     parse_words,
+    probe_video,
     transcribe,
 )
 
 DEFAULT_MODEL = "ggml-large-v3-turbo"
+DEFAULT_FONTSIZE = 90
+DEFAULT_MARGIN_V = 600
 
 
 def _project_root() -> Path:
@@ -40,15 +47,25 @@ def _resolve_model(name_or_path: str) -> Path:
     return _project_root() / "models" / stem
 
 
-def _default_config() -> Path:
-    return _project_root() / "config.toml"
+def _config_paths(explicit: Path | None) -> list[Path]:
+    """Configs a mergear, en orden de menor a mayor prioridad:
+    proyecto -> usuario (~/.config/qcaptions/) -> --config explícito.
+    """
+    paths = [
+        _project_root() / "config.toml",
+        Path.home() / ".config" / "qcaptions" / "config.toml",
+    ]
+    if explicit:
+        paths.append(explicit)
+    return paths
 
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="qcaptions",
         description="Genera subtítulos animados estilo CapCut (Data Quimbaya) "
-        "100% local sobre un video vertical.",
+        "100% local sobre un video vertical. "
+        "Diagnóstico del entorno: qcaptions doctor",
     )
     p.add_argument("video", type=Path, help="Video de entrada (.mp4 vertical).")
     p.add_argument(
@@ -84,19 +101,25 @@ def build_parser() -> argparse.ArgumentParser:
         help="Fuente del subtítulo (default: 'Montserrat ExtraBold').",
     )
     p.add_argument(
-        "--fontsize", type=int, default=90, help="Tamaño de fuente (default: 90)."
+        "--fontsize",
+        type=int,
+        default=None,
+        help=f"Tamaño de fuente (default: {DEFAULT_FONTSIZE}, escalado a la "
+        "resolución real del video).",
     )
     p.add_argument(
         "--margin-v",
         type=int,
-        default=600,
-        help="Margen vertical desde abajo (default: 600, ~68%% de altura).",
+        default=None,
+        help=f"Margen vertical desde abajo (default: {DEFAULT_MARGIN_V} en "
+        "1080x1920, escalado a la resolución real).",
     )
     p.add_argument(
         "--config",
         type=Path,
         default=None,
-        help="Ruta a config.toml (default: config.toml del proyecto).",
+        help="config.toml extra (se mergea sobre el del proyecto y el de "
+        "~/.config/qcaptions/config.toml).",
     )
     p.add_argument(
         "--language", default="es", help="Idioma de la transcripción (default: es)."
@@ -113,6 +136,32 @@ def build_parser() -> argparse.ArgumentParser:
         help="Genera words.json y subs.ass pero NO quema el video.",
     )
     p.add_argument(
+        "--preview",
+        type=float,
+        default=None,
+        metavar="SEG",
+        help="Quema solo los primeros SEG segundos a <video>_preview.mp4 "
+        "(rápido, para iterar sobre el estilo).",
+    )
+    p.add_argument(
+        "--archival",
+        action="store_true",
+        help="Burn con libx264 crf 18 preset slow (máxima calidad, lento). "
+        "Default: encoder por hardware (videotoolbox), calidad de sobra "
+        "para TikTok y mucho más rápido.",
+    )
+    p.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-transcribe aunque exista una transcripción cacheada vigente.",
+    )
+    p.add_argument(
+        "--open",
+        action="store_true",
+        dest="open_after",
+        help="Abre el video final al terminar (QuickTime).",
+    )
+    p.add_argument(
         "--out",
         type=Path,
         default=None,
@@ -123,11 +172,20 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+    # Subcomando doctor (antes de argparse para no chocar con el posicional).
+    if argv and argv[0] == "doctor":
+        from .doctor import main as doctor_main
+
+        return doctor_main(argv[1:])
+
     args = build_parser().parse_args(argv)
     try:
         return _run(args)
     except PipelineError as exc:
         sys.stderr.write(f"\n✗ {exc}\n")
+        sys.stderr.write("  Diagnóstico del entorno: qcaptions doctor\n")
         return 1
 
 
@@ -137,44 +195,74 @@ def _run(args: argparse.Namespace) -> int:
         raise PipelineError(f"No existe el video de entrada: {video}")
 
     stem = video.with_suffix("")
-    out_video = args.out or Path(f"{stem}_captioned.mp4")
+    if args.preview is not None:
+        out_video = args.out or Path(f"{stem}_preview.mp4")
+    else:
+        out_video = args.out or Path(f"{stem}_captioned.mp4")
+    burn_mode = "archival" if args.archival else "fast"
+    if args.preview is not None:
+        burn_mode = "fast"  # un preview nunca necesita archival
 
-    style = AssStyle(
-        fontname=args.font,
-        fontsize=args.fontsize,
-        margin_v=args.margin_v,
-        uppercase=not args.no_uppercase,
-        pop=not args.no_pop,
+    # Estilo: diseñado sobre 1080x1920 y escalado a la resolución real.
+    width, height = probe_video(video)
+    style = scale_style(
+        AssStyle(
+            fontname=args.font,
+            uppercase=not args.no_uppercase,
+            pop=not args.no_pop,
+        ),
+        width,
+        height,
     )
+    # Overrides explícitos del usuario (sin re-escalar).
+    if args.fontsize is not None:
+        style.fontsize = args.fontsize
+    if args.margin_v is not None:
+        style.margin_v = args.margin_v
+    if (width, height) != (1080, 1920):
+        print(f"→ Video {width}x{height}: estilo escalado "
+              f"(fontsize {style.fontsize}, marginV {style.margin_v}).")
 
     # --- Ruta rápida: re-quemar un .ass editado a mano ---
     if args.from_ass:
         if not args.from_ass.exists():
             raise PipelineError(f"No existe el .ass indicado: {args.from_ass}")
         print(f"→ Quemando {args.from_ass.name} sobre {video.name} ...")
-        burn(video, args.from_ass, out_video)
-        print(f"✓ Listo: {out_video}")
-        return 0
+        burn(video, args.from_ass, out_video, mode=burn_mode,
+             preview_seconds=args.preview)
+        return _finish(out_video, args)
 
     words_json = Path(f"{stem}.words.json")
     ass_path = Path(f"{stem}.subs.ass")
-
-    # 1-2. Audio
-    wav = Path(f"{stem}.16k.wav")
-    print(f"→ [1/5] Extrayendo audio 16kHz mono ...")
-    extract_audio(video, wav)
-
-    # 3. Transcripción word-level
-    model = _resolve_model(args.model)
-    print(f"→ [2/5] Transcribiendo con whisper.cpp ({model.name}) ...")
     raw_json = Path(f"{stem}.whisper.json")
-    transcribe(wav, model, raw_json, language=args.language)
 
-    # 4. Normalizar + correcciones
-    print(f"→ [3/5] Normalizando palabras y aplicando correcciones ...")
+    # 1-3. Audio + transcripción (con cache: el whisper.json se conserva y se
+    # reusa si es más nuevo que el video; --force lo regenera).
+    cache_ok = (
+        not args.force
+        and raw_json.exists()
+        and raw_json.stat().st_mtime >= video.stat().st_mtime
+    )
+    if cache_ok:
+        print(f"→ [1-2/5] Transcripción cacheada ({raw_json.name}; "
+              f"--force para regenerar).")
+    else:
+        wav = Path(f"{stem}.16k.wav")
+        print("→ [1/5] Extrayendo audio 16kHz mono ...")
+        extract_audio(video, wav)
+        model = _resolve_model(args.model)
+        print(f"→ [2/5] Transcribiendo con whisper.cpp ({model.name}) ...")
+        transcribe(wav, model, raw_json, language=args.language)
+        try:
+            wav.unlink()
+        except OSError:
+            pass
+
+    # 4. Normalizar + correcciones (siempre se re-aplican: editar config.toml
+    # y re-correr actualiza los subtítulos sin re-transcribir).
+    print("→ [3/5] Normalizando palabras y aplicando correcciones ...")
     words = parse_words(raw_json)
-    config = args.config or _default_config()
-    rules = load_corrections(config)
+    rules = load_corrections(_config_paths(args.config))
     words = apply_corrections(words, rules)
     words_json.write_text(
         json.dumps(words, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -182,7 +270,7 @@ def _run(args: argparse.Namespace) -> int:
     print(f"    {len(words)} palabras → {words_json.name}")
 
     # 5. Agrupar + generar .ass
-    print(f"→ [4/5] Agrupando en captions y generando .ass ...")
+    print("→ [4/5] Agrupando en captions y generando .ass ...")
     captions = group_words(
         words, max_words=args.max_words, max_duration=args.max_duration
     )
@@ -190,25 +278,29 @@ def _run(args: argparse.Namespace) -> int:
     ass_path.write_text(ass, encoding="utf-8")
     print(f"    {len(captions)} captions → {ass_path.name}")
 
-    # limpieza de intermedios de audio/whisper
-    for tmp in (wav, raw_json):
-        try:
-            tmp.unlink()
-        except OSError:
-            pass
-
     if args.dry_run:
         print(f"✓ Dry-run: generados {words_json.name} y {ass_path.name} "
               f"(no se quemó el video).")
         return 0
 
     # 6. Burn-in
-    print(f"→ [5/5] Quemando subtítulos (crf 18, preset slow) ...")
-    burn(video, ass_path, out_video)
-    print(f"\n✓ Listo: {out_video}")
+    if args.preview is not None:
+        print(f"→ [5/5] Preview: quemando los primeros {args.preview:g}s ...")
+    else:
+        label = "libx264 archival" if burn_mode == "archival" else "videotoolbox"
+        print(f"→ [5/5] Quemando subtítulos ({label}) ...")
+    burn(video, ass_path, out_video, mode=burn_mode, preview_seconds=args.preview)
+
     print(f"  Intermedios: {words_json.name}, {ass_path.name}")
     print(f"  Editá el .ass y re-quemá con: "
           f"qcaptions {video.name} --from-ass {ass_path.name}")
+    return _finish(out_video, args)
+
+
+def _finish(out_video: Path, args: argparse.Namespace) -> int:
+    print(f"\n✓ Listo: {out_video}")
+    if args.open_after:
+        subprocess.run(["open", str(out_video)], check=False)
     return 0
 
 
