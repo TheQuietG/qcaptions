@@ -94,10 +94,14 @@ palabras en una sola tomando el inicio de la primera y el fin de la última.
 - Anclado a ~68% de la altura (arriba de la UI de TikTok).
 - Montserrat ExtraBold (fallback: la fuente por defecto de libass).
 
-## Tests
+## Tests y validación
 
 ```bash
-python3 -m pytest tests/      # o: pip install pytest
+python3 -m pytest tests/       # tests puros (o: pip install pytest)
+python3 scripts/validate.py    # validación end-to-end reproducible:
+                               # genera un video con `say -v Mónica`, corre el
+                               # pipeline, chequea coherencia y verifica por
+                               # píxeles que la palabra activa sale dorada.
 ```
 
 ## Cómo funciona (pipeline)
