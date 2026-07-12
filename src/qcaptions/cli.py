@@ -16,6 +16,7 @@ from .assgen import AssStyle, build_ass, scale_style
 from .burn import burn
 from .corrections import apply_corrections, load_corrections
 from .grouping import group_words
+from .paths import models_dir, user_config_paths
 from .transcribe import (
     PipelineError,
     extract_audio,
@@ -29,35 +30,17 @@ DEFAULT_FONTSIZE = 90
 DEFAULT_MARGIN_V = 600
 
 
-def _project_root() -> Path:
-    # <root>/src/qcaptions/cli.py -> <root>
-    return Path(__file__).resolve().parents[2]
-
-
 def _resolve_model(name_or_path: str) -> Path:
     p = Path(name_or_path)
     if p.exists():
         return p
-    # nombre suelto -> models/<name>.bin dentro del proyecto
+    # nombre suelto -> <data>/models/<name>.bin
     stem = name_or_path
     if not stem.startswith("ggml-"):
         stem = f"ggml-{stem}"
     if not stem.endswith(".bin"):
         stem = f"{stem}.bin"
-    return _project_root() / "models" / stem
-
-
-def _config_paths(explicit: Path | None) -> list[Path]:
-    """Configs a mergear, en orden de menor a mayor prioridad:
-    proyecto -> usuario (~/.config/qcaptions/) -> --config explícito.
-    """
-    paths = [
-        _project_root() / "config.toml",
-        Path.home() / ".config" / "qcaptions" / "config.toml",
-    ]
-    if explicit:
-        paths.append(explicit)
-    return paths
+    return models_dir() / stem
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -262,7 +245,7 @@ def _run(args: argparse.Namespace) -> int:
     # y re-correr actualiza los subtítulos sin re-transcribir).
     print("→ [3/5] Normalizando palabras y aplicando correcciones ...")
     words = parse_words(raw_json)
-    rules = load_corrections(_config_paths(args.config))
+    rules = load_corrections(user_config_paths(args.config))
     words = apply_corrections(words, rules)
     words_json.write_text(
         json.dumps(words, ensure_ascii=False, indent=2), encoding="utf-8"

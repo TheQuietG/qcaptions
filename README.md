@@ -8,7 +8,19 @@ Un comando: `qcaptions video.mp4` → `video_captioned.mp4`.
 
 ![ejemplo](docs/ejemplo.png)
 
-## Setup (una vez)
+## Instalación con Homebrew (recomendada)
+
+```bash
+brew tap TheQuietG/tap
+brew install qcaptions
+qcaptions doctor --download-model   # baja el modelo (~1.5 GB) y verifica todo
+brew install --cask font-montserrat # fuente del estilo (opcional pero recomendada)
+```
+
+En modo instalado, los modelos viven en `~/.qcaptions/models/` y tu config en
+`~/.config/qcaptions/config.toml` (override total con la env `QCAPTIONS_HOME`).
+
+## Setup desde el código (desarrollo)
 
 ```bash
 # 1. Motor de transcripción con soporte Metal
@@ -105,12 +117,13 @@ el estilo se escala proporcionalmente (probado con 4K vertical).
 
 ## Correcciones de texto (`config.toml`)
 
-whisper a veces oye mal términos técnicos. Hay tres niveles que se mergean
+whisper a veces oye mal términos técnicos. Hay varios niveles que se mergean
 (el de más abajo pisa al de más arriba):
 
-1. `config.toml` del proyecto (los defaults del repo)
-2. `~/.config/qcaptions/config.toml` (tus correcciones personales)
-3. `--config otro.toml` (por corrida)
+1. Defaults empaquetados (`src/qcaptions/default_corrections.toml`)
+2. `<data>/config.toml` (raíz del repo en desarrollo, `~/.qcaptions/` instalado)
+3. `~/.config/qcaptions/config.toml` (tus correcciones personales)
+4. `--config otro.toml` (por corrida)
 
 Formato:
 

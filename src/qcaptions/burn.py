@@ -10,9 +10,18 @@ Si videotoolbox falla (Mac vieja, ffmpeg sin soporte), cae solo a libx264.
 
 from __future__ import annotations
 
+import re
+import shutil
+import tempfile
 from pathlib import Path
 
 from .transcribe import PipelineError, _run, find_ffmpeg
+
+# Caracteres que pasan sin drama por los DOS niveles de parseo del -vf de
+# ffmpeg (grafo y opción). Cualquier otro (coma, comilla, ':', '[', ...) se
+# esquiva copiando el .ass a un temp con nombre seguro: el doble des-escape
+# de ffmpeg es demasiado frágil para pelearlo con strings.
+_SAFE_FILTER_PATH = re.compile(r"^[\w./ @-]+$")
 
 
 def burn(
@@ -24,6 +33,30 @@ def burn(
 ) -> Path:
     """Quema los subtítulos .ass sobre el video. Audio copiado sin recodificar."""
     ffmpeg = find_ffmpeg(need_ass=True)
+
+    tmp_ass: Path | None = None
+    if not _SAFE_FILTER_PATH.match(str(ass)):
+        fd, name = tempfile.mkstemp(prefix="qcaptions_", suffix=".ass")
+        import os
+
+        os.close(fd)
+        tmp_ass = Path(name)
+        shutil.copyfile(ass, tmp_ass)
+    try:
+        return _burn(ffmpeg, video, tmp_ass or ass, out, mode, preview_seconds)
+    finally:
+        if tmp_ass:
+            tmp_ass.unlink(missing_ok=True)
+
+
+def _burn(
+    ffmpeg: str,
+    video: Path,
+    ass: Path,
+    out: Path,
+    mode: str,
+    preview_seconds: float | None,
+) -> Path:
     ass_arg = _escape_filter_path(ass)
 
     base = [ffmpeg, "-y", "-i", str(video)]
@@ -54,7 +87,8 @@ def burn(
 
 
 def _escape_filter_path(path: Path) -> str:
-    # En el grafo de filtros de ffmpeg hay que escapar ':' y '\'.
+    # Para rutas "seguras" (ver _SAFE_FILTER_PATH) no hace falta escapar nada;
+    # esto queda por si el temp dir del sistema trae algo exótico.
     s = str(path)
     s = s.replace("\\", "\\\\").replace(":", "\\:")
     return s

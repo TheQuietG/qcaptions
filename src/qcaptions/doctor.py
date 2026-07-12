@@ -12,6 +12,7 @@ import sys
 import urllib.request
 from pathlib import Path
 
+from .paths import models_dir as _models_dir
 from .transcribe import _FFMPEG_CANDIDATES, _has_ass_filter
 
 HF_BASE = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
@@ -23,10 +24,6 @@ KNOWN_MODELS = {
     "ggml-medium": "más liviano (~1.5 GB), algo menos preciso",
     "ggml-small": "rápido (~470 MB), para pruebas",
 }
-
-
-def _models_dir() -> Path:
-    return Path(__file__).resolve().parents[2] / "models"
 
 
 def _check(ok: bool, label: str, hint: str = "") -> bool:

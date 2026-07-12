@@ -1,10 +1,12 @@
-# qcaptions — correcciones post-transcripción
+# qcaptions — correcciones por defecto (empaquetadas con la herramienta)
 #
 # Clave = lo que whisper suele oír (una o varias palabras, sin importar
 # mayúsculas/acentos). Valor = texto correcto que quedará en el subtítulo.
 #
 # Los reemplazos multi-palabra colapsan las palabras en una sola (útil para
 # siglas/cifras: "ene ocho ene" -> "n8n", así nunca se parte la sigla).
+#
+# Agregá las tuyas en ~/.config/qcaptions/config.toml (pisan a estas).
 
 [corrections]
 "ene ocho ene" = "n8n"

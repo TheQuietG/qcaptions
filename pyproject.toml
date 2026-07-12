@@ -4,9 +4,10 @@ build-backend = "hatchling.build"
 
 [project]
 name = "qcaptions"
-version = "0.1.0"
+version = "0.2.0"
 description = "Subtítulos animados estilo CapCut 100% locales para videos verticales (Data Quimbaya)"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.11"
 authors = [{ name = "Data Quimbaya" }]
 dependencies = []  # solo stdlib (tomllib) + binarios externos (whisper.cpp, ffmpeg)
