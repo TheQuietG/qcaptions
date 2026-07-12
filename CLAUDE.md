@@ -70,6 +70,11 @@ tests/            # tests de las piezas puras (corrections, grouping, assgen)
 - **Burn default = h264_videotoolbox** (`-q:v 65`): segundos en vez de minutos,
   calidad de sobra para TikTok (recomprime todo). `--archival` = libx264 crf 18
   slow. Si videotoolbox falla, cae solo a libx264.
+- **Modelo por config**: `[settings] model = "..."` en la cadena de configs
+  fija el modelo default (el flag `--model` la pisa). Resolución:
+  `--model` > `[settings].model` > `ggml-large-v3-turbo`. Verificado que el
+  q5_0 cuantizado da texto ~idéntico al full (solo "vídeo"/"video") con drift
+  de timestamps ≤130 ms en el clip de prueba.
 - **Cache de transcripción**: el `.whisper.json` crudo se CONSERVA junto al
   video y se reusa si es más nuevo que el .mp4 (`--force` regenera). Las
   correcciones y la agrupación se re-aplican SIEMPRE desde el crudo, así editar

@@ -6,7 +6,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from qcaptions.assgen import AssStyle, build_ass, scale_style  # noqa: E402
-from qcaptions.corrections import apply_corrections, load_corrections  # noqa: E402
+from qcaptions.corrections import (  # noqa: E402
+    apply_corrections,
+    load_corrections,
+    load_settings,
+)
 from qcaptions.grouping import group_words  # noqa: E402
 
 
@@ -75,6 +79,24 @@ def test_scale_style_header_uses_real_resolution():
     s = scale_style(AssStyle(), 2160, 3840)
     ass = build_ass(group_words(_words(("a", 0.0, 0.5)), 4, 1.8), s)
     assert "PlayResX: 2160" in ass and "PlayResY: 3840" in ass
+
+
+def test_load_settings_merge_last_wins():
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as d:
+        a = Path(d) / "a.toml"
+        b = Path(d) / "b.toml"
+        a.write_text(
+            '[settings]\nmodel = "ggml-medium"\n[corrections]\n"x" = "y"\n',
+            encoding="utf-8",
+        )
+        b.write_text(
+            '[settings]\nmodel = "ggml-large-v3-turbo-q5_0"\n', encoding="utf-8"
+        )
+        assert load_settings([a, b])["model"] == "ggml-large-v3-turbo-q5_0"
+        assert load_settings([b, a])["model"] == "ggml-medium"
+        assert load_settings([Path(d) / "nope.toml"]) == {}
 
 
 def test_load_corrections_merge_user_over_project(tmp_path=None):

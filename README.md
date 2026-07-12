@@ -45,12 +45,20 @@ qcaptions doctor --download-model     # baja ggml-large-v3-turbo (~1.5 GB)
 `qcaptions doctor` diagnostica el entorno completo (whisper, ffmpeg, libass,
 modelo, fuente) y te dice el comando exacto para arreglar lo que falte.
 
-¿Poco espacio? El modelo cuantizado rinde casi igual y pesa un tercio:
+¿Poco espacio? El modelo cuantizado rinde casi igual y pesa un tercio (547 MB
+vs 1.5 GB). Descargalo y fijalo como tu default en la config:
 
 ```bash
 qcaptions doctor --download-model ggml-large-v3-turbo-q5_0
-qcaptions video.mp4 --model ggml-large-v3-turbo-q5_0
 ```
+
+```toml
+# ~/.config/qcaptions/config.toml
+[settings]
+model = "ggml-large-v3-turbo-q5_0"
+```
+
+(También podés pasarlo por corrida con `--model`; el flag pisa a la config.)
 
 Requisitos: Python 3.11+ (usa solo stdlib), macOS Apple Silicon.
 

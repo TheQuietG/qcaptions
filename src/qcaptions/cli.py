@@ -14,7 +14,7 @@ from pathlib import Path
 from . import __version__
 from .assgen import AssStyle, build_ass, scale_style
 from .burn import burn
-from .corrections import apply_corrections, load_corrections
+from .corrections import apply_corrections, load_corrections, load_settings
 from .grouping import group_words
 from .paths import models_dir, user_config_paths
 from .transcribe import (
@@ -53,8 +53,9 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("video", type=Path, help="Video de entrada (.mp4 vertical).")
     p.add_argument(
         "--model",
-        default=DEFAULT_MODEL,
-        help=f"Modelo whisper.cpp (nombre o ruta). Default: {DEFAULT_MODEL}.",
+        default=None,
+        help=f"Modelo whisper.cpp (nombre o ruta). Default: 'model' en "
+        f"[settings] de la config, o {DEFAULT_MODEL}.",
     )
     p.add_argument(
         "--max-words",
@@ -233,7 +234,9 @@ def _run(args: argparse.Namespace) -> int:
         wav = Path(f"{stem}.16k.wav")
         print("→ [1/5] Extrayendo audio 16kHz mono ...")
         extract_audio(video, wav)
-        model = _resolve_model(args.model)
+        settings = load_settings(user_config_paths(args.config))
+        model_name = args.model or settings.get("model") or DEFAULT_MODEL
+        model = _resolve_model(model_name)
         print(f"→ [2/5] Transcribiendo con whisper.cpp ({model.name}) ...")
         transcribe(wav, model, raw_json, language=args.language)
         try:

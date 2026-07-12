@@ -87,6 +87,22 @@ def apply_corrections(
     return result
 
 
+def load_settings(config_paths: list[Path]) -> dict:
+    """Mergea las tablas [settings] de la cadena de configs (última gana).
+
+    Uso típico en ~/.config/qcaptions/config.toml:
+        [settings]
+        model = "ggml-large-v3-turbo-q5_0"
+    """
+    merged: dict = {}
+    for path in config_paths:
+        if path is None or not path.exists():
+            continue
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
+        merged.update(data.get("settings", {}))
+    return merged
+
+
 def _norm(text: str) -> str:
     """Normaliza para comparar: minúsculas, sin puntuación de borde ni acentos."""
     text = text.strip().lower()
