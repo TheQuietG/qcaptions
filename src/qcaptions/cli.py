@@ -116,12 +116,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--intro",
+        "--logo",
         type=Path,
         default=None,
         metavar="LOGO",
-        help="Logo animado al inicio (PNG, idealmente con transparencia). "
-        "También configurable en [intro] de config.toml para aplicarlo "
-        "siempre.",
+        help="Logo animado al inicio (PNG con transparencia o SVG, que se "
+        "rasteriza solo). También configurable en [intro] de config.toml "
+        "para aplicarlo siempre.",
     )
     p.add_argument(
         "--no-intro",
@@ -233,7 +234,7 @@ def _run(args: argparse.Namespace) -> int:
         intro_cfg = load_table(user_config_paths(args.config), "intro")
         intro = intro_from_config(intro_cfg, override_logo=args.intro)
     if intro:
-        print(f"→ Intro: {intro.logo.name} "
+        print(f"→ Intro: {intro.display_name} "
               f"({intro.start:g}s → {intro.end:g}s).")
 
     # --- Ruta rápida: re-quemar un .ass editado a mano ---

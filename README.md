@@ -139,7 +139,15 @@ y_frac = 0.20       # posición vertical (opcional)
 ```
 
 Con eso configurado, se aplica a todos tus videos automáticamente.
-Por corrida: `--intro logo.png` (pisa la config) o `--no-intro` (lo salta).
+Por corrida: `--logo logo.png` (alias: `--intro`; pisa la config) o
+`--no-intro` (lo salta).
+
+También acepta **SVG** directamente — se rasteriza solo (con `rsvg-convert`
+si está instalado, o Quick Look de macOS como fallback):
+
+```bash
+qcaptions video.mp4 --logo logo.svg
+```
 
 ## Correcciones de texto (`config.toml`)
 
