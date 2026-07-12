@@ -78,7 +78,10 @@ def ensure_test_video(video: Path) -> None:
 def run_pipeline(video: Path, model: str) -> tuple[Path, Path, Path]:
     from qcaptions.cli import main as qc_main
 
-    rc = qc_main([str(video), "--model", model])
+    # --no-intro: la validación debe ser hermética — la config personal del
+    # usuario (~/.config/qcaptions) puede tener [intro] mode=card, que corre
+    # los captions y rompería la comparación contra words.json.
+    rc = qc_main([str(video), "--model", model, "--no-intro"])
     if rc != 0:
         raise SystemExit("El pipeline qcaptions devolvió error.")
     stem = video.with_suffix("")
