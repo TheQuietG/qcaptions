@@ -113,12 +113,36 @@ def test_intro_card_filter_and_shift():
     spec = IntroSpec(logo=Path("/tmp/logo.png"), mode="card", duration=2.8)
     assert spec.shift == 2.3  # duration - XFADE(0.5)
     graph = build_card_filter(spec, 1080, 1920, 30.0, "subs.ass")
-    assert "color=black:s=1080x1920" in graph
+    assert "color=0x000000:s=1080x1920" in graph
     assert "xfade=transition=fade:duration=0.5:offset=2.300" in graph
     assert "adelay=2300:all=1" in graph
     assert "abs(X-W/2)+abs(Y-H/2)" in graph   # revelado Manhattan (circuito)
+    assert "gblur" in graph                    # glow default en card
     # overlay no desplaza nada
     assert IntroSpec(logo=Path("/tmp/l.png")).shift == 0.0
+
+
+def test_intro_card_custom_knobs():
+    from qcaptions.intro import IntroSpec, build_card_filter, from_config
+
+    spec = IntroSpec(logo=Path("/tmp/logo.png"), mode="card",
+                     bg="#07080b", glow=False, reveal_duration=2.0)
+    graph = build_card_filter(spec, 1080, 1920, 30.0, "s.ass")
+    assert "color=0x07080b" in graph
+    assert "gblur" not in graph
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(suffix=".png") as f:
+        spec2 = from_config({"logo": f.name, "mode": "card", "bg": "07080b",
+                             "feather": 90, "glow": False})
+        assert spec2.bg == "#07080b" and spec2.feather == 90 and not spec2.glow
+    # bg inválido debe fallar claro
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".png") as f:
+            from_config({"logo": f.name, "mode": "card", "bg": "azul"})
+        raise AssertionError("bg inválido no falló")
+    except Exception as e:
+        assert "bg inválido" in str(e)
 
 
 def test_intro_card_config_defaults():

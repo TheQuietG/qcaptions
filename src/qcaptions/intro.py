@@ -15,6 +15,7 @@ son grafos de filtros de ffmpeg puros, pensados para ser editables
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -36,6 +37,12 @@ class IntroSpec:
     fade_out: float = 0.5
     width_frac: float = 0.45  # ancho del logo como fracción del ancho del video
     y_frac: float = 0.20      # overlay: posición vertical (fracción de altura)
+    # --- solo modo card ---
+    bg: str = "#000000"       # color de fondo de la card
+    reveal_start: float = 0.25    # cuándo empieza a esparcirse (s)
+    reveal_duration: float = 1.3  # cuánto tarda el esparcimiento (s)
+    feather: int = 60             # borde difuso del frente de expansión (px)
+    glow: bool = True             # halo suave detrás del logo
 
     @property
     def end(self) -> float:
@@ -83,9 +90,21 @@ def from_config(cfg: dict, override_logo: Path | None = None) -> IntroSpec | Non
         spec.duration = 2.8
         spec.width_frac = 0.55
 
-    for key in ("start", "duration", "fade_in", "fade_out", "width_frac", "y_frac"):
+    for key in ("start", "duration", "fade_in", "fade_out", "width_frac",
+                "y_frac", "reveal_start", "reveal_duration"):
         if key in cfg:
             setattr(spec, key, float(cfg[key]))
+    if "feather" in cfg:
+        spec.feather = int(cfg["feather"])
+    if "glow" in cfg:
+        spec.glow = bool(cfg["glow"])
+    if "bg" in cfg:
+        bg = str(cfg["bg"]).strip()
+        if not re.fullmatch(r"#?[0-9a-fA-F]{6}", bg):
+            raise PipelineError(
+                f"[intro] bg inválido: '{bg}' (formato: #RRGGBB)."
+            )
+        spec.bg = bg if bg.startswith("#") else f"#{bg}"
     return spec
 
 
@@ -148,27 +167,39 @@ def build_card_filter(
     """
     fps_i = max(1, round(fps))
     logo_w = max(2, round(video_w * spec.width_frac))
-    t0 = 0.25          # cuándo empieza el revelado (s)
-    reveal = 1.3       # cuánto tarda en esparcirse por completo (s)
-    feather = 60       # borde difuso del frente de expansión (px)
-    speed = logo_w / reveal  # px de radio Manhattan por segundo
+    t0 = spec.reveal_start
+    speed = logo_w / spec.reveal_duration  # px de radio Manhattan por segundo
+    bg = f"0x{spec.bg.lstrip('#')}"
     # alpha final = alpha del logo * frente de expansión (0..1 con feather)
     a_expr = (
         f"alpha(X,Y)*clip(((N/{fps_i}-{t0})*{speed}"
-        f"-(abs(X-W/2)+abs(Y-H/2)))/{feather},0,1)"
+        f"-(abs(X-W/2)+abs(Y-H/2)))/{spec.feather},0,1)"
     )
     delay_ms = int(round(spec.shift * 1000))
-    return (
-        f"color=black:s={video_w}x{video_h}:r={fps_i}:d={spec.duration:.3f},"
+
+    graph = (
+        f"color={bg}:s={video_w}x{video_h}:r={fps_i}:d={spec.duration:.3f},"
         f"format=yuv420p,setsar=1[bg];"
         f"[1:v]fps={fps_i},format=gbrap,scale={logo_w}:-1,"
         f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='{a_expr}'[lg];"
-        f"[bg][lg]overlay=x=(W-w)/2:y=(H-h)/2[card];"
+    )
+    if spec.glow:
+        # Halo: copia difuminada del logo (ya revelado) debajo del nítido.
+        graph += (
+            f"[lg]split[lga][lgb];"
+            f"[lgb]gblur=sigma=28[glow];"
+            f"[bg][glow]overlay=x=(W-w)/2:y=(H-h)/2[b1];"
+            f"[b1][lga]overlay=x=(W-w)/2:y=(H-h)/2[card];"
+        )
+    else:
+        graph += f"[bg][lg]overlay=x=(W-w)/2:y=(H-h)/2[card];"
+    graph += (
         f"[0:v]fps={fps_i},format=yuv420p,setsar=1[v0];"
         f"[card][v0]xfade=transition=fade:duration={XFADE}:offset={spec.shift:.3f}[vx];"
         f"[vx]ass={ass_arg}[vout];"
         f"[0:a]adelay={delay_ms}:all=1[aout]"
     )
+    return graph
 
 
 def build_filter(spec: IntroSpec, video_w: int, video_h: int, ass_arg: str) -> str:

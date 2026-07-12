@@ -142,6 +142,12 @@ logo = "~/branding/logo.png"   # o .svg (se rasteriza solo)
 mode = "card"                  # "overlay" (default) | "card"
 duration = 2.8      # card: duración total / overlay: tiempo visible
 width_frac = 0.55   # ancho del logo relativo al video
+# solo card:
+# bg = "#07080b"          # color de fondo de la pantalla inicial
+# reveal_start = 0.25     # cuándo empieza a esparcirse (s)
+# reveal_duration = 1.3   # cuánto tarda el esparcimiento (s)
+# feather = 60            # suavidad del frente de expansión (px)
+# glow = true             # halo suave detrás del logo
 # solo overlay:
 # y_frac = 0.20     # posición vertical
 # start = 0.3       # cuándo aparece
